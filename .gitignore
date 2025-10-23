@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.DS_Store
+.env
+*.xlsx   # If you don't want excel in repo — but note app needs it if not using external storage
