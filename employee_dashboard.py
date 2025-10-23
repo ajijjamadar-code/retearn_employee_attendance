@@ -218,6 +218,8 @@ def update_graphs(selected_emp):
     return fig1, fig2, fig3, fig5, fig4
 
 
+server = app.server
+
 # === Step 5: Run Dashboard ===
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8050))
