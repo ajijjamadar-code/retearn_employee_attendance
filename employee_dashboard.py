@@ -5,13 +5,17 @@ import plotly.express as px
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output
 
-# === Step 1: Load Excel (use relative path for Render deployment) ===
+# === Step 1: Load Excel (Render-safe path) ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 excel_path = os.path.join(BASE_DIR, "data", "Retearn Emp In & Out details.xlsx")
 
+# Ensure file exists
+if not os.path.exists(excel_path):
+    raise FileNotFoundError(f"Excel file not found at: {excel_path}")
+
 df = pd.read_excel(excel_path)
 
-# === Step 2: Data cleaning ===
+# === Step 2: Data Cleaning ===
 def convert_time_to_hours(t):
     try:
         if pd.isna(t):
@@ -36,6 +40,9 @@ df['IN (hr)'] = df['IN'].apply(convert_in_to_float)
 
 # === Step 3: Dash App Setup ===
 app = Dash(__name__)
+server = app.server  # required for Render / Gunicorn
+
+app.title = "Employee Attendance Dashboard"
 
 app.layout = html.Div([
     html.H2("Employee Attendance Dashboard", style={'textAlign': 'center', 'marginBottom': 20}),
@@ -157,7 +164,6 @@ def update_graphs(selected_emp):
         marker_color=px.colors.qualitative.Set2,
         name='Avg IN Time'
     ))
-
     fig3.update_layout(
         title="Average IN Time per Employee",
         xaxis_title="Employee",
@@ -218,9 +224,7 @@ def update_graphs(selected_emp):
     return fig1, fig2, fig3, fig5, fig4
 
 
-server = app.server
-
-# === Step 5: Run Dashboard ===
+# === Step 5: Run the Dashboard (for local testing) ===
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8050))
     app.run(debug=False, host="0.0.0.0", port=port)
