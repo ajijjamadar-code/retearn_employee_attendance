@@ -1,11 +1,14 @@
+import os
 import pandas as pd
 from datetime import datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output
 
-# === Step 1: Load Excel ===
-excel_path = r"C:\attendance\Retearn Emp In & Out details.xlsx"
+# === Step 1: Load Excel (use relative path for Render deployment) ===
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+excel_path = os.path.join(BASE_DIR, "data", "Retearn Emp In & Out details.xlsx")
+
 df = pd.read_excel(excel_path)
 
 # === Step 2: Data cleaning ===
@@ -217,4 +220,5 @@ def update_graphs(selected_emp):
 
 # === Step 5: Run Dashboard ===
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 8050))
+    app.run(debug=False, host="0.0.0.0", port=port)
