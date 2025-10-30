@@ -1,18 +1,11 @@
-import os
 import pandas as pd
 from datetime import datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output
 
-# === Step 1: Load Excel (Render-safe path) ===
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-excel_path = os.path.join(BASE_DIR, "data", "Retearn Emp In & Out details.xlsx")
-
-# Ensure file exists
-if not os.path.exists(excel_path):
-    raise FileNotFoundError(f"Excel file not found at: {excel_path}")
-
+# === Step 1: Load Excel File ===
+excel_path = r"C:\attendance\data\Retearn Emp In & Out details.xlsx"
 df = pd.read_excel(excel_path)
 
 # === Step 2: Data Cleaning ===
@@ -37,11 +30,10 @@ def convert_in_to_float(t):
 df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y', errors='coerce')
 df['Total Hours (hr)'] = df['Total Hrs'].apply(convert_time_to_hours)
 df['IN (hr)'] = df['IN'].apply(convert_in_to_float)
+df['OUT (hr)'] = df['OUT'].apply(convert_in_to_float)
 
 # === Step 3: Dash App Setup ===
 app = Dash(__name__)
-server = app.server  # required for Render / Gunicorn
-
 app.title = "Employee Attendance Dashboard"
 
 app.layout = html.Div([
@@ -62,23 +54,16 @@ app.layout = html.Div([
     html.Div([
         dcc.Graph(id='scatter-plot', style={'height': '420px', 'width': '95%', 'margin': 'auto'}),
         html.Br(),
-        dcc.Graph(id='avg-hours', style={'height': '380px', 'width': '95%', 'margin': 'auto'}),
-        html.Br(),
-        dcc.Graph(id='avg-in-time', style={'height': '380px', 'width': '95%', 'margin': 'auto'}),
-        html.Br(),
-        dcc.Graph(id='daily-in-time', style={'height': '380px', 'width': '95%', 'margin': 'auto'}),
+        dcc.Graph(id='in-out-time', style={'height': '380px', 'width': '95%', 'margin': 'auto'}),
         html.Br(),
         dcc.Graph(id='daily-total-hours', style={'height': '380px', 'width': '95%', 'margin': 'auto'})
     ])
 ], style={'fontFamily': 'Segoe UI, sans-serif', 'backgroundColor': '#FAFAFA', 'padding': '10px 0'})
 
-
-# === Step 4: Callbacks for Interactive Updates ===
+# === Step 4: Callbacks ===
 @app.callback(
     [Output('scatter-plot', 'figure'),
-     Output('avg-hours', 'figure'),
-     Output('avg-in-time', 'figure'),
-     Output('daily-in-time', 'figure'),
+     Output('in-out-time', 'figure'),
      Output('daily-total-hours', 'figure')],
     [Input('emp-filter', 'value')]
 )
@@ -87,7 +72,7 @@ def update_graphs(selected_emp):
     if selected_emp:
         filtered = filtered[filtered['Name'] == selected_emp]
 
-    # === Scatter Plot (<8 hrs only) ===
+    # === Scatter Plot (<8 hrs) ===
     scatter_df = filtered[filtered['Total Hours (hr)'] < 8]
     color_map = px.colors.qualitative.Plotly
     employees = scatter_df['Name'].unique()
@@ -116,115 +101,62 @@ def update_graphs(selected_emp):
         title="Employees Working Less than 8 Hours (Scatter)",
         xaxis_title="Date",
         yaxis_title="Total Hours Worked",
-        template="plotly_white",
-        height=420,
-        margin=dict(l=60, r=40, t=60, b=60)
+        template="plotly_white"
     )
 
-    # === Average Calculations ===
-    avg_df = filtered.groupby(['EMP ID', 'Name']).agg(
-        Avg_Work_Hours=('Total Hours (hr)', 'mean'),
-        Avg_IN_Time=('IN (hr)', 'mean'),
-        Days_Worked=('Date', 'count')
-    ).reset_index()
+    # === IN & OUT Time (Line Graph) ===
+    filtered['IN_Timestamp'] = filtered['IN (hr)'].apply(lambda h: datetime(2025, 1, 1) + timedelta(hours=h))
+    filtered['OUT_Timestamp'] = filtered['OUT (hr)'].apply(lambda h: datetime(2025, 1, 1) + timedelta(hours=h))
 
-    if avg_df.empty:
-        return fig1, go.Figure(), go.Figure(), go.Figure(), go.Figure()
-
-    def float_to_time_string(h_float):
-        hours = int(h_float)
-        minutes = int(round((h_float - hours) * 60))
-        t = datetime(2025, 1, 1, hours, minutes)
-        return t.strftime("%I:%M %p")
-
-    avg_df['Avg_IN_Display'] = avg_df['Avg_IN_Time'].apply(float_to_time_string)
-    avg_df['Avg_IN_Timestamp'] = avg_df['Avg_IN_Time'].apply(lambda h: datetime(2025, 1, 1) + timedelta(hours=h))
-
-    # === Average Working Hours Bar ===
-    fig2 = px.bar(
-        avg_df,
-        x='Name',
-        y='Avg_Work_Hours',
-        text='Avg_Work_Hours',
-        color='Name',
-        title='Average Working Hours per Employee',
-        template='plotly_white'
-    )
-    fig2.update_traces(texttemplate='%{text:.2f} hrs', textposition='outside')
-    fig2.update_layout(showlegend=False, yaxis_title="Average Hours", height=500,
-                       margin=dict(l=60, r=40, t=60, b=60))
-
-    # === Average IN Time Bar ===
-    fig3 = go.Figure()
-    fig3.add_trace(go.Bar(
-        x=avg_df['Name'],
-        y=avg_df['Avg_IN_Timestamp'],
-        text=avg_df['Avg_IN_Display'],
-        textposition='outside',
-        marker_color=px.colors.qualitative.Set2,
-        name='Avg IN Time'
-    ))
-    fig3.update_layout(
-        title="Average IN Time per Employee",
-        xaxis_title="Employee",
-        yaxis_title="Average IN Time",
-        yaxis=dict(tickformat="%I:%M %p", type='date'),
-        template="plotly_white",
-        height=380,
-        showlegend=False,
-        margin=dict(l=60, r=40, t=60, b=60)
-    )
-
-    # === Daily IN Time (Line Chart) ===
-    daily_in_df = filtered.copy()
-    daily_in_df['IN_Timestamp'] = daily_in_df['IN (hr)'].apply(lambda h: datetime(2025, 1, 1) + timedelta(hours=h))
-    fig5 = go.Figure()
-    fig5.add_trace(go.Scatter(
-        x=daily_in_df['Date'],
-        y=daily_in_df['IN_Timestamp'],
+    fig_in_out = go.Figure()
+    fig_in_out.add_trace(go.Scatter(
+        x=filtered['Date'],
+        y=filtered['IN_Timestamp'],
         mode='lines+markers',
-        line=dict(width=3, color='#0074D9'),
+        name='IN Time',
+        line=dict(width=3, color='#2E86C1'),
         marker=dict(size=8),
-        text=daily_in_df['IN'],
-        hovertemplate="Date: %{x|%d-%b-%Y}<br>IN Time: %{text}<extra></extra>",
-        name='IN Time'
+        hovertemplate="Date: %{x|%d-%b-%Y}<br>IN: %{y|%I:%M %p}<extra></extra>"
     ))
-    fig5.update_layout(
-        title="Daily IN Time per Employee (Line Chart)",
+
+    fig_in_out.add_trace(go.Scatter(
+        x=filtered['Date'],
+        y=filtered['OUT_Timestamp'],
+        mode='lines+markers',
+        name='OUT Time',
+        line=dict(width=3, color='#E74C3C'),
+        marker=dict(size=8),
+        hovertemplate="Date: %{x|%d-%b-%Y}<br>OUT: %{y|%I:%M %p}<extra></extra>"
+    ))
+
+    fig_in_out.update_layout(
+        title="Employee IN and OUT Times (Daily Trend)",
         xaxis_title="Date",
-        yaxis_title="IN Time",
+        yaxis_title="Time of Day",
         yaxis=dict(tickformat="%I:%M %p", type='date'),
-        template="plotly_white",
-        height=380,
-        margin=dict(l=60, r=40, t=60, b=60),
-        showlegend=False
+        template="plotly_white"
     )
 
-    # === Daily Total Hours (Line Chart) ===
+    # === Daily Total Hours ===
     fig4 = go.Figure()
     fig4.add_trace(go.Scatter(
         x=filtered['Date'],
         y=filtered['Total Hours (hr)'],
         mode='lines+markers',
         line=dict(width=3, color='#FF5733'),
-        marker=dict(size=8),
-        hovertemplate="Date: %{x|%d-%b-%Y}<br>Total Hours: %{y:.2f}<extra></extra>",
-        name='Total Hours'
+        hovertemplate="Date: %{x|%d-%b-%Y}<br>Total Hours: %{y:.2f}<extra></extra>"
     ))
     fig4.update_layout(
-        title="Total Working Hours per Day (Line Chart)",
+        title="Total Working Hours per Day",
         xaxis_title="Date",
         yaxis_title="Total Hours",
-        template="plotly_white",
-        height=380,
-        margin=dict(l=60, r=40, t=60, b=60),
-        showlegend=False
+        template="plotly_white"
     )
 
-    return fig1, fig2, fig3, fig5, fig4
+    return fig1, fig_in_out, fig4
 
 
-# === Step 5: Run the Dashboard (for local testing) ===
+# === Step 5: Run Locally ===
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8050))
-    app.run(debug=False, host="0.0.0.0", port=port)
+    app.run(debug=True)
+
