@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output
 
 # === Step 1: Load Excel File ===
-excel_path = r"C:\attendance\data\Retearn Emp In & Out details.xlsx"
+excel_path = "data\Retearn Emp In & Out details.xlsx"
 df = pd.read_excel(excel_path)
 
 # === Step 2: Data Cleaning ===
