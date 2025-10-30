@@ -44,6 +44,7 @@ if not df.empty:
 
 # === Step 3: Dash App Setup ===
 app = Dash(__name__)
+server = app.server
 app.title = "Employee Attendance Dashboard"
 
 app.layout = html.Div([
