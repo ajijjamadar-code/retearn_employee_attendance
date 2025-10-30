@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from datetime import datetime, timedelta
 import plotly.express as px
@@ -5,8 +6,16 @@ import plotly.graph_objects as go
 from dash import Dash, dcc, html, Input, Output
 
 # === Step 1: Load Excel File ===
-excel_path = "data\Retearn Emp In & Out details.xlsx"
-df = pd.read_excel(excel_path)
+base_dir = os.path.dirname(os.path.abspath(__file__))
+excel_path = os.path.join(base_dir, "data", "Retearn Emp In & Out details.xlsx")
+
+# Handle file not found
+if not os.path.exists(excel_path):
+    print(f"[Warning] Excel file not found at: {excel_path}")
+    print("App will start with an empty dataset.")
+    df = pd.DataFrame(columns=['Name', 'Date', 'IN', 'OUT', 'Total Hrs'])
+else:
+    df = pd.read_excel(excel_path)
 
 # === Step 2: Data Cleaning ===
 def convert_time_to_hours(t):
@@ -27,10 +36,11 @@ def convert_in_to_float(t):
     except:
         return 0
 
-df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y', errors='coerce')
-df['Total Hours (hr)'] = df['Total Hrs'].apply(convert_time_to_hours)
-df['IN (hr)'] = df['IN'].apply(convert_in_to_float)
-df['OUT (hr)'] = df['OUT'].apply(convert_in_to_float)
+if not df.empty:
+    df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y', errors='coerce')
+    df['Total Hours (hr)'] = df['Total Hrs'].apply(convert_time_to_hours)
+    df['IN (hr)'] = df['IN'].apply(convert_in_to_float)
+    df['OUT (hr)'] = df['OUT'].apply(convert_in_to_float)
 
 # === Step 3: Dash App Setup ===
 app = Dash(__name__)
@@ -43,7 +53,7 @@ app.layout = html.Div([
         html.Label("Select Employee:", style={'fontWeight': 'bold'}),
         dcc.Dropdown(
             id='emp-filter',
-            options=[{'label': emp, 'value': emp} for emp in sorted(df['Name'].unique())],
+            options=[{'label': emp, 'value': emp} for emp in sorted(df['Name'].unique())] if not df.empty else [],
             value=None,
             placeholder="Select an Employee",
             clearable=True,
@@ -68,6 +78,10 @@ app.layout = html.Div([
     [Input('emp-filter', 'value')]
 )
 def update_graphs(selected_emp):
+    if df.empty:
+        empty_fig = go.Figure().update_layout(title="No data available")
+        return empty_fig, empty_fig, empty_fig
+
     filtered = df.copy()
     if selected_emp:
         filtered = filtered[filtered['Name'] == selected_emp]
@@ -155,8 +169,6 @@ def update_graphs(selected_emp):
 
     return fig1, fig_in_out, fig4
 
-
-# === Step 5: Run Locally ===
+# === Step 5: Run App ===
 if __name__ == "__main__":
     app.run(debug=True)
-
